@@ -1,3 +1,3 @@
 # detect_object_yolo_v1
 
-My current working mini-project. No code yet...sorry 
+This project aims at replicating the work of yolo_v1: https://arxiv.org/abs/1506.02640
