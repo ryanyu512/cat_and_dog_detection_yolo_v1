@@ -8,9 +8,9 @@ import tensorflow as tf
 from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.layers import Input
 from tensorflow.keras.layers import BatchNormalization
-from tensorflow.keras.layers import ZeroPadding2D, Conv2D, MaxPooling2D
+from tensorflow.keras.layers import ZeroPadding2D, Conv2D, MaxPooling2D, AveragePooling2D
 from tensorflow.keras.layers import Flatten, Dense
-from tensorflow.keras.layers import LeakyReLU, Softmax
+from tensorflow.keras.layers import LeakyReLU, Softmax, Activation
 
 CONV_MAX_CONFIG = [
     [7,   64, 2, 3], #1
@@ -42,43 +42,21 @@ CONV_MAX_CONFIG = [
     [3, 1024, 1, 1], #23
     [3, 1024, 1, 1]  #24
 ]
-
-class ConvBlock:
-    
-    def __init__(self, ch, k, s, p, alpha = 0.1):
-        self.z2d = ZeroPadding2D(padding = (p, p))
-        self.c2d = Conv2D(filters = ch,
-                          kernel_size = (k, k),
-                          strides = (s, s),
-                          padding = 'valid')
-        self.bn = BatchNormalization(axis = -1)
-        self.lr = LeakyReLU(alpha = alpha)
-         
-    def __call__(self, x):
         
-        x = self.z2d(x)
-        x = self.c2d(x)
-        x = self.bn(x)
-        x = self.lr(x)
-        
-        return x
-         
 class Network:
     
-    def __init__(self):
+    def __init__(self, class_num = 20):
         
-        self.backbone = Sequential()
-        self.neck = Sequential()
-        self.fc = Sequential()
+        self.backbone = Sequential(name = 'backbone')
+        self.neck = Sequential(name = 'neck')
+        self.fc = Sequential(name = 'fc_layers')
+        self.cls_num = class_num
         
         #define backbone
-        
         for i in range(24):
             config = CONV_MAX_CONFIG[i]
             if CONV_MAX_CONFIG[i] != 'max_pool':
                 k, ch, s, p = config
-                #cb = ConvBlock(ch, k, s, p)
-                #self.backbone.add(cb)
                 z2d = ZeroPadding2D(padding = (p, p))
                 c2d = Conv2D(filters = ch,
                              kernel_size = (k, k),
@@ -95,7 +73,14 @@ class Network:
                                    strides   = (2, 2), 
                                    padding   = 'valid')
                 self.backbone.add(m2d)
-            
+        
+        self.ap2d = AveragePooling2D(pool_size = (2, 2), 
+                                        strides   = (2, 2), 
+                                        padding   = 'valid')
+        self.flatten = Flatten()
+        self.dense = Dense(class_num)
+        self.sig   = Activation('sigmoid')
+       
         #define neck
         for i in range(24, len(CONV_MAX_CONFIG)):
             config = CONV_MAX_CONFIG[i]
@@ -127,11 +112,22 @@ class Network:
         self.fc.add(Dense(4096))
         self.fc.add(LeakyReLU(alpha = 0.1))
         self.fc.add(Dense(1470))
+    
+    def YOLO_v1_pretrain(self):
         
-        
+        feed = Input((224, 224, 3))
+        x = self.backbone(feed)
+        x = self.ap2d(x)
+        x = self.flatten(x)
+        x = self.dense(x)
+        out = self.sig(x)
+           
+        model = Model(feed, [out])  
+            
+        return model
+    
     def YOLO_v1(self):
         
-        #in detection mode, input size = 448, 448, 3
         feed = Input((448, 448, 3))
         x = self.backbone(feed)
         x = self.neck(x)
