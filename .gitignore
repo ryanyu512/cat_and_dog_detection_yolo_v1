@@ -2,7 +2,6 @@ VOCdevkit_2007_test
 VOCdevkit_2007_trainval
 VOCdevkit_2012_test
 VOCdevkit_2012_trainval
-pretrain_model_weights.index
-pretrain_model_weights.data-00000-of-00001
+pretrain_model_weights.h5
 checkpoint
 .ipynb_checkpoints
