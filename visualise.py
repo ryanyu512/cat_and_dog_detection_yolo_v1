@@ -1,3 +1,9 @@
+'''
+UPDATED ON 2023/04/03
+
+1. aims at providing custom library of label/prediction visualization
+'''
+
 import cv2
 import json
 from matplotlib import pyplot as plt
@@ -22,8 +28,8 @@ def visualise_labels(img_path):
 
     return cv2.rectangle(img, (x_min, y_min), (x_max, y_max), color=[0,0,255], thickness=1)
 
-def visualise_boxes(img, kpoints, color = [0,0,255], thickness = 2, is_show_scores = False):
-    for kpoint in kpoints:
+def visualise_boxes(img, kpoints, color = [0,0,255], thickness = 2, is_show_scores = False, objs = None):
+    for kpoint, obj  in zip(kpoints, objs):
         #define bbox
         x_min, y_min, x_max, y_max = kpoint[0:4]
         x_min, y_min, x_max, y_max = int(x_min), int(y_min), int(x_max), int(y_max)
@@ -41,5 +47,13 @@ def visualise_boxes(img, kpoints, color = [0,0,255], thickness = 2, is_show_scor
                         cv2.FONT_HERSHEY_SIMPLEX, 
                         0.5, 
                         color, 1) 
+        
+        if obj is not None:
+            cv2.putText(img, 
+                        obj, 
+                        (x_min, y_min + 20), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 
+                        0.5, 
+                        color, 2) 
         
     return img
