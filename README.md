@@ -1,9 +1,9 @@
 # cat and dog detection based on yolo v1 concept
-![image](https://user-images.githubusercontent.com/19774686/235701954-6484daee-1ff8-40b0-ac9b-910ffb623037.png)
+![image](https://user-images.githubusercontent.com/19774686/235753814-847b08f2-b95d-4364-99eb-c6d4200b550a.png)
 
 PROJECT BRIEF
 
-  Based on concepts of YOLO v1(https://arxiv.org/abs/1506.02640), a DL model for cat and dog detection is trained and validated. Since the detection targets of this project are cat and dog, the architechure needs not to be exactly the same as YOLO v1. But, the loss function and corresponding data augmentation mentioned in the paper are implemented in this project. 
+  Based on concepts of YOLO v1(https://arxiv.org/abs/1506.02640), a deep learning model for cat and dog detection is trained and validated. Since the detection targets of this project are cat and dog, the architechure needs not to be as large as YOLO v1. But, the loss function and corresponding data augmentation mentioned in the paper are implemented in this project. 
 
   Data is downloaded from this [link](https://www.kaggle.com/datasets/andrewmvd/dog-and-cat-detection). The data size is around 1GB, contains 3686 cat and dog images with bounding box labels. Since the data size is quite small, then the data is just splitted into 2 sets training and validation. The training/validation split ratio is 0.9/0.1 for each class. 
   
