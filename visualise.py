@@ -1,5 +1,5 @@
 '''
-UPDATED ON 2023/04/03
+UPDATED ON 2023/05/02
 
 1. aims at providing custom library of label/prediction visualization
 '''
@@ -8,52 +8,52 @@ import cv2
 import json
 from matplotlib import pyplot as plt
 
-def visualise_labels(img_path):
-    #load img
-    img = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB) 
-    #load label
-    lab_path = (img_path.split('.'))[0] + '.json'
-
-    #load label
-    f = open(lab_path)
-    lab = json.load(f)
-    bbox = lab['bbox']
-    cls = lab['class']
+def visualise_boxes(img, boxes, color = [0,0,255], thickness = 2, fontscale = 2, is_show_scores = False, objs = None):
     
-    #define bbox
-    x_min = int(bbox[0]*img.shape[1])
-    x_max = int(bbox[2]*img.shape[1])
-    y_min = int(bbox[1]*img.shape[0])
-    y_max = int(bbox[3]*img.shape[0])
-
-    return cv2.rectangle(img, (x_min, y_min), (x_max, y_max), color=[0,0,255], thickness=1)
-
-def visualise_boxes(img, kpoints, color = [0,0,255], thickness = 2, is_show_scores = False, objs = None):
-    for kpoint, obj  in zip(kpoints, objs):
+    '''
+        args:
+            img: image to be displayed
+            boxes: bounding box [x_min, y_min, x_max, y_max, conf(optional)]
+            thickness: line thickness of bounding box and text
+            fontscale: fone size
+            is_show_scores: define if show scores of bounding boxes
+            objs: name of objects (i.e. cat, dog)
+        
+        returns:
+            img: image with bounding boxes
+    '''
+    
+    for i, box  in enumerate(boxes):
         #define bbox
-        x_min, y_min, x_max, y_max = kpoint[0:4]
+        x_min, y_min, x_max, y_max = box[0:4]
         x_min, y_min, x_max, y_max = int(x_min), int(y_min), int(x_max), int(y_max)
+        
+        #draw rectangle
         cv2.rectangle(img, 
                       (x_min, y_min), 
                       (x_max, y_max),
                       color = color,
                       thickness = thickness)
         
-        if len(kpoint) > 4 and is_show_scores:
+        #draw scores
+        if len(box) > 4 and is_show_scores:
             cv2.putText(img, 
-                        str(round(kpoint[4], 2)), 
-                        ((x_min + x_max)//2, 
-                        y_max + 20), 
+                        str(round(box[4], 2)), 
+                        ((x_min + 60), 
+                          y_min + 20), 
                         cv2.FONT_HERSHEY_SIMPLEX, 
-                        0.5, 
-                        color, 1) 
+                        fontScale = fontscale,
+                        thickness = thickness, 
+                        color = color) 
         
-        if obj is not None:
+        #draw class name
+        if objs is not None:
             cv2.putText(img, 
-                        obj, 
+                        objs[i], 
                         (x_min, y_min + 20), 
                         cv2.FONT_HERSHEY_SIMPLEX, 
-                        0.5, 
-                        color, 2) 
+                        fontScale = fontscale,
+                        thickness = thickness, 
+                        color = color) 
         
     return img

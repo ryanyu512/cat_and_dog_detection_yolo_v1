@@ -9,51 +9,13 @@ import cv2
 import copy
 import json
 import uuid
+import math
 import random
+import numpy as np
+
+from marco import *
 from bs4 import BeautifulSoup
-
-def yolo2minmax(yboxes, img_w, img_h):
-    '''
-    args:
-        yboxes: [xc, yc, w, h] in normalized yolo format 
-        img_w, img_h: shape of image
-        
-    returns:
-        boxes: [x1, y1, x2, y2] - VOC format    
-    '''
-    
-    boxes = [None]*len(yboxes)
-    for i, ybox in enumerate(yboxes):
-        xc, yc, w, h = ybox
-        x1 = (xc - w/2)*img_w
-        y1 = (yc - h/2)*img_h
-        x2 = (xc + w/2)*img_w
-        y2 = (yc + h/2)*img_h
-        boxes[i] = [x1, y1, x2, y2]
-    
-    return boxes
-
-def minmax2yolo(boxes, img_w, img_h):
-    '''
-    args:
-        boxes: [x1, y1, x2, y2] - VOC format
-        img_w, img_h: shape of image
-        
-    returns:
-        yboxes: [xc, yc, w, h] in normalized yolo format    
-    '''
-    
-    yboxes = [None]*len(boxes)
-    for i, box in enumerate(boxes):
-        xc = (box[0] + box[2])/2./img_w
-        yc = (box[1] + box[3])/2./img_h
-
-        w = (box[2] - box[0])/img_w
-        h = (box[3] - box[1])/img_h
-
-        yboxes[i] = [xc, yc, w, h]
-    
-    return yboxes
+from matplotlib import pyplot as plt
 
 def load_data_path(roots, target = 'train'):
     '''
@@ -90,6 +52,60 @@ def load_data_path(roots, target = 'train'):
         lab_path += [os.path.join(root, 'Annotations', line.replace('\n','') + '.xml') for line in lines]
         
     return img_path, lab_path 
+
+def split_ids(data, train=0.9, valid=0.1, test=0, seed = 0):
+    """
+    args:
+       data : list of data paths
+       train: train split size (between 0 - 1)
+       valid: valid split size (between 0 - 1)
+       test : test split size (between 0 - 1)
+       seed : random seed
+        
+    returns:
+        train_set: list of training data paths
+        valid_set: list of validation data paths
+         test_set: list of testing data paths
+    """
+    
+    if train + valid + test != 1:
+        return 
+    
+    list_copy = list(range(0, len(data)))
+    random.Random(seed).shuffle(list_copy)
+    
+    #obtain the size of training, validation and testing data
+    train_size = math.floor(len(list_copy) * train)
+    valid_size = math.floor(len(list_copy) * valid)
+    test_size  = len(list_copy) - train_size - valid_size
+    
+    train_set = [None]*train_size
+    if train + valid == 1.0:
+        valid_size += test_size 
+        valid_set = [None]*valid_size
+        test_set  = None
+        test_size = 0
+    else:
+        valid_set = [None]*valid_size
+        test_set  = [None]*test_size
+    
+    #split the data into training, validation and testing dataset
+    idx = 0
+    for i, rand_ind in enumerate(list_copy):
+        
+        if i == train_size or i == train_size + valid_size:
+            idx = 0
+            
+        if i < train_size:
+            train_set[idx]= data[rand_ind]
+        elif i >= train_size and i < train_size + valid_size:
+            valid_set[idx]= data[rand_ind]
+        else:
+            test_set[idx] = data[rand_ind]
+        idx += 1
+        
+    return train_set, valid_set, test_set
+
 
 def split_VOC_data(img_path, lab_path, cls2ind, target_root = None, is_save = True):
     
@@ -160,8 +176,10 @@ def split_VOC_data(img_path, lab_path, cls2ind, target_root = None, is_save = Tr
             cv2.imwrite(img_save, img)
             with open(lab_save, 'w') as f:
                 json.dump(annotation, f)
-            
-def get_aug_data(img_path, lab_path, transform, aug_num = 1, target_root = 'data/aug_train'):
+                
+
+
+def get_aug_pretrain_data(img_path, lab_path, transform, aug_num = 1, target_root = 'data/aug_train'):
     
     '''
     aim:
@@ -183,37 +201,45 @@ def get_aug_data(img_path, lab_path, transform, aug_num = 1, target_root = 'data
         img = cv2.cvtColor(cv2.imread(img_load), cv2.COLOR_BGR2RGB)
         img_h, img_w, _ = img.shape
         
-        lab = json.load(open(lab_load, 'r'))
-        yboxes = minmax2yolo(boxes = lab['box'], img_w = img_w, img_h = img_h)  
+        lab      = json.load(open(lab_load, 'r'))  
+
+        boxes  = lab['box']     
+        obj_dict = {}
+        for i, k in enumerate(lab['obj']):
+            if k not in obj_dict:
+                obj_dict[k] = []
+            obj_dict[k].append([i, boxes[i]])
         
         uid = (img_load.split('.')[0]).split('/')[-1]
         
-        if transform is None:
-            aug_num = 1
-            
-        for i in range(aug_num):
-            
-            if transform is not None:
-                img_cpy = copy.deepcopy(img)
-                transformed = transform(image = img_cpy, 
-                                        bboxes = yboxes,
-                                        class_labels = lab['obj'])
+        for i, k in enumerate(obj_dict):
+            obj_boxes = obj_dict[k]
+            d_one_hot = lab['d_one_hot'][obj_boxes[0][0]]
 
-                timg   = transformed['image']
-                tboxes = transformed['bboxes']
-                tobjs  = transformed['class_labels']
-                tlab   = copy.deepcopy(lab)
-                tlab['obj'] = tobjs
-                tlab['box'] = tboxes      
-            else:
-                timg   = copy.deepcopy(img)
-                tlab   = copy.deepcopy(lab)
-                tlab['box'] = yboxes   
+            msk = np.zeros((img.shape[0], img.shape[1], 3)).astype(np.uint8)
+            for _, box in obj_boxes:
+                x1, y1 = round(max(box[0], 0)), round(max(box[1], 0))
+                x2, y2 = round(min(box[2], img_w)), round(min(box[3], img_h))
+                msk[y1:y2, x1:x2,:] = img[y1:y2, x1:x2,:].copy()
+                        
+            if transform is None:
+                aug_num = 1   
             
-            img_save = os.path.join(target_root, f'{uid}-{i}' + '.jpg')
-            lab_save = os.path.join(target_root, f'{uid}-{i}' + '.json')
-            cv2.imwrite(img_save, cv2.cvtColor(timg, cv2.COLOR_RGB2BGR))
-            
-            with open(lab_save, 'w') as f:
-                json.dump(tlab, f)
+            for j in range(aug_num): 
+                msk_cpy = copy.deepcopy(msk)
                 
+                tlab = {}
+                tlab['img_name']  = lab["img_name"]
+                tlab['d_one_hot'] = d_one_hot
+                tlab['obj']       = k
+                
+                if j != 0:
+                    transformed = transform(image = msk_cpy)
+                    msk_cpy = copy.deepcopy(transformed['image'])
+                
+                img_save = os.path.join(target_root, f'{uid}-{i}{j}' + '.jpg')
+                lab_save = os.path.join(target_root, f'{uid}-{i}{j}' + '.json')
+                cv2.imwrite(img_save, cv2.cvtColor(msk_cpy, cv2.COLOR_RGB2BGR))
+                with open(lab_save, 'w') as f:
+                    json.dump(tlab, f)
+            

@@ -1,140 +1,165 @@
 '''
-    Updated on 2023/03/30
+    Updated on 2023/04/21
     
-    1. aim at defining the architechure of yolo_v1
+    1. aim at defining the architechure of object detector
 '''
-
 
 import tensorflow as tf
 
 from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.layers import Input
-from tensorflow.keras.layers import BatchNormalization
 from tensorflow.keras.layers import ZeroPadding2D, Conv2D, MaxPooling2D, AveragePooling2D
-from tensorflow.keras.layers import Flatten, Dense
-from tensorflow.keras.layers import LeakyReLU, Softmax, Activation
+from tensorflow.keras.layers import Flatten, GlobalAveragePooling2D, Dense
+from tensorflow.keras.layers import LeakyReLU, ReLU, PReLU, Softmax, Activation, Dropout
 
-CONV_MAX_CONFIG = [
-    [7,   64, 2, 3], #1
-    'max_pool',
-    [3,  192, 1, 1], #2
-    'max_pool',
-    [1,  128, 1, 0], #3
-    [3,  256, 1, 1], #4
-    [1,  256, 1, 0], #5
-    [3,  512, 1, 1], #6
-    'max_pool',
-    [1,  256, 1, 0], #7
-    [3,  512, 1, 1], #8
-    [1,  256, 1, 0], #9
-    [3,  512, 1, 1], #10
-    [1,  256, 1, 0], #11
-    [3,  512, 1, 1], #12
-    [1,  256, 1, 0], #13
-    [3,  512, 1, 1], #14
-    [1,  512, 1, 0], #15
-    [3, 1024, 1, 1], #16
-    'max_pool',
-    [1,  512, 1, 0], #17
-    [3, 1024, 1, 1], #18
-    [1,  512, 1, 0], #19
-    [3, 1024, 1, 1], #20 <= first 20 needs to train for classification firstly
-    [3, 1024, 1, 1], #21
-    [3, 1024, 2, 1], #22
-    [3, 1024, 1, 1], #23
-    [3, 1024, 1, 1]  #24
-]
+class ConvBlock(tf.keras.layers.Layer):
+    def __init__(self, 
+                 ch, 
+                 pad_size = (1, 1), 
+                 c_size   = (3, 3),
+                 c_stride = (1, 1), 
+                 m_size   = (2, 2),
+                 m_stride = (2, 2),
+                 m_pad = 'valid',
+                 alpha = 0.1, 
+                 is_max = True,
+                 is_train = False):
+        super(ConvBlock, self).__init__()
+        self.ch = ch
+        self.pad_size = pad_size
+        self.c_size   = c_size
+        self.c_stride = c_stride
+        self.c_pad    = 'valid'
+        self.m_size   = m_size
+        self.m_stride = m_stride
+        self.m_pad = m_pad
+        self.alpha = alpha
+        self.is_max = is_max
+        self.is_use_bias = True
+        self.is_train = is_train
         
-class Network:
+        self.z2d = ZeroPadding2D(padding = self.pad_size)
+        self.c2d = Conv2D(filters = self.ch,
+                          kernel_size = self.c_size,
+                          kernel_initializer='he_uniform',
+                          strides = self.c_stride,
+                          padding = self.c_pad,
+                          use_bias = self.is_use_bias)
+        self.pReLU = PReLU(shared_axes = [1,2])
+        self.m2d  = MaxPooling2D(pool_size = self.m_size, 
+                                 strides   = self.m_stride, 
+                                 padding   = self.m_pad)
+        
+    def get_config(self):
     
-    def __init__(self, class_num = 20):
+        config = super().get_config().copy()
+        config.update({
+            'ch': self.ch,
+            'pad_size': self.pad_size,
+            'c_size': self.c_size,
+            'c_stride': self.c_stride,
+            'c_pad': self.c_pad,
+            'm_size': self.m_size,
+            'm_stride': self.m_stride,
+            'm_pad':self.m_pad,
+            'alpha':self.alpha,
+            'is_max':self.is_max,
+            'is_use_bias':self.is_use_bias,
+        })
+        return config
+    
+    def call(self, x):
+        
+        x = self.z2d(x)
+        x = self.c2d(x)
+        x = self.pReLU(x)
+        if self.is_max:
+            x = self.m2d(x)
+        
+        return x
+
+class Det_Network:
+    
+    def __init__(self, 
+                 g_num = 7,
+                 b_num = 2, 
+                 cls_num = 2, 
+                 fc_dropout_ratio = 0.5,
+                 is_train = False):
         
         self.backbone = Sequential(name = 'backbone')
-        self.neck = Sequential(name = 'neck')
-        self.fc = Sequential(name = 'fc_layers')
-        self.cls_num = class_num
+        self.neck     = Sequential(name = 'neck')
+        self.is_train = is_train
+        self.fc_dropout_ratio = fc_dropout_ratio
         
         #define backbone
-        for i in range(24):
-            config = CONV_MAX_CONFIG[i]
-            if CONV_MAX_CONFIG[i] != 'max_pool':
-                k, ch, s, p = config
-                z2d = ZeroPadding2D(padding = (p, p))
-                c2d = Conv2D(filters = ch,
-                             kernel_size = (k, k),
-                             strides = (s, s),
-                             padding = 'valid')
-                bn = BatchNormalization(axis = -1)
-                lr = LeakyReLU(alpha = 0.1)
-                self.backbone.add(z2d)
-                self.backbone.add(c2d)
-                self.backbone.add(bn)
-                self.backbone.add(lr)
-            else:
-                m2d = MaxPooling2D(pool_size = (2, 2), 
-                                   strides   = (2, 2), 
-                                   padding   = 'valid')
-                self.backbone.add(m2d)
-        
-        self.ap2d = AveragePooling2D(pool_size = (2, 2), 
-                                        strides   = (2, 2), 
-                                        padding   = 'valid')
-        self.flatten = Flatten()
-        self.dense = Dense(class_num)
-        self.sig   = Activation('sigmoid')
-       
+        self.backbone.add(ConvBlock(ch = 64, 
+                                    pad_size = (3, 3),
+                                    c_size   = (7, 7),
+                                    c_stride = (2, 2), 
+                                    is_max = True,
+                                    is_train = is_train))
+        self.backbone.add(ConvBlock(ch = 192, 
+                                    pad_size = (1, 1),
+                                    c_size   = (3, 3),
+                                    c_stride = (1, 1),
+                                    is_max = True,
+                                    is_train = is_train))
+        self.backbone.add(ConvBlock(ch = 256, 
+                                    pad_size = (1, 1),
+                                    c_size   = (3, 3),
+                                    c_stride = (1, 1),
+                                    is_max = False,
+                                    is_train = is_train))
+        self.backbone.add(ConvBlock(ch = 256, 
+                                    pad_size = (1, 1),
+                                    c_size   = (3, 3),
+                                    c_stride = (1, 1),
+                                    is_max = True,
+                                    is_train = is_train))
         #define neck
-        for i in range(24, len(CONV_MAX_CONFIG)):
-            config = CONV_MAX_CONFIG[i]
-            '''
-            k, ch, s, p = config[0], config[1], config[2], config[3]
-            cb = ConvBlock(ch, k, s, p)
-            '''
-            k, ch, s, p = config
-            z2d = ZeroPadding2D(padding = (p, p))
-            c2d = Conv2D(filters = ch,
-                            kernel_size = (k, k),
-                            strides = (s, s),
-                            padding = 'valid')
-            bn = BatchNormalization(axis = -1)
-            lr = LeakyReLU(alpha = 0.1)
-            self.neck.add(z2d)
-            self.neck.add(c2d)
-            self.neck.add(bn)
-            self.neck.add(lr)
-        
+        self.neck.add(ConvBlock(ch = 512, 
+                                pad_size = (1, 1),
+                                c_size   = (3, 3),
+                                c_stride = (1, 1),
+                                is_max = True,
+                                is_train = is_train))
+        self.neck.add(ConvBlock(ch = 1024, 
+                                pad_size = (1, 1),
+                                c_size   = (3, 3),
+                                c_stride = (1, 1),
+                                is_max = True,
+                                is_train = is_train))
+
         #define fully connected network
         '''
         1. grid cell = 7*7
-        2. class = 20
+        2. class = 2
         3. # of bbox = 2
-        4. 49*(20 + 2*5) = 1470
+        4. 49*(cls_num + 2*5)
         '''
-        self.fc.add(Flatten())
-        self.fc.add(Dense(4096))
-        self.fc.add(LeakyReLU(alpha = 0.1))
-        self.fc.add(Dense(1470))
-    
-    def YOLO_v1_pretrain(self):
+        self.flatten  = Flatten(name = 'det_flatten')
+        self.dense1   = Dense(640, 
+                              kernel_initializer= 'he_uniform',
+                              name = 'det_dense1')
+        self.LReLU    = LeakyReLU(alpha = 0.1, name = 'det_LReLU')
+        self.dropout2 = Dropout(rate = self.fc_dropout_ratio, 
+                                name = 'det_dropout2')
+        self.dense2   = Dense(g_num*g_num*(cls_num + b_num*5), 
+                              kernel_initializer= 'he_uniform',
+                              name = 'det_dense2')
         
-        feed = Input((224, 224, 3))
-        x = self.backbone(feed)
-        x = self.ap2d(x)
-        x = self.flatten(x)
-        x = self.dense(x)
-        out = self.sig(x)
-           
-        model = Model(feed, [out])  
-            
-        return model
-    
-    def YOLO_v1(self):
+    def obj_det(self):
         
         feed = Input((448, 448, 3))
-        x = self.backbone(feed)
-        x = self.neck(x)
-        out = self.fc(x)
-        
+        x    = self.backbone(feed)
+        x    = self.neck(x)
+        x    = self.flatten(x)
+        x    = self.dense1(x)
+        x    = self.dropout2(x, training = self.is_train)
+        x    = self.LReLU(x)
+        out  = self.dense2(x)
+                      
         model = Model(feed, [out])
         
         return model
