@@ -1,7 +1,7 @@
 # cat and dog detection based on yolo v1 concept
 ![image](https://user-images.githubusercontent.com/19774686/235701954-6484daee-1ff8-40b0-ac9b-910ffb623037.png)
 
-BRIEF
+PROJECT BRIEF
 
   Based on concepts of YOLO v1(https://arxiv.org/abs/1506.02640), a DL model for cat and dog detection is trained and validated. Since the detection targets of this project are cat and dog, the architechure needs not to be exactly the same as YOLO v1. But, the loss function and corresponding data augmentation mentioned in the paper are implemented in this project. 
 
@@ -9,6 +9,7 @@ BRIEF
   
   The average precision and recall of validation data are 0.92 and 0.88 respectively.
 
+FILE BRIEF
 1. explore_det_data.ipynb: aims at exploring how to extract data from label
 2. explore_data_quality.ipynb: explore the data quality, such as any duplicated image or wrong label
 3. det_network_explore.ipynb: explore the defined cat and dog network architechure
