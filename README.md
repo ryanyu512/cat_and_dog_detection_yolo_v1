@@ -7,7 +7,7 @@ PROJECT BRIEF
 
   Data is downloaded from this [link](https://www.kaggle.com/datasets/andrewmvd/dog-and-cat-detection). The data size is around 1GB, contains 3686 cat and dog images with bounding box labels. Since the data size is quite small, then the data is just splitted into 2 sets training and validation. The training/validation split ratio is 0.9/0.1 for each class. 
   
-  Based on IOU_threshold@0.5, The average precision and recall of validation data are 0.92 and 0.88 respectively.
+  Based on IOU_threshold@0.5, The average precision and recall of validation data are 0.92 and 0.88 respectively. Since the detection model size is too large, I choose not to upload to github. 
 
 FILE BRIEF
 1. explore_det_data.ipynb: aims at exploring how to extract data from label
